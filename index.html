@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Snake game by Oliver Nikolajevic</title>
+    
+    <style>
+       
+        body {
+            background-color: #009BFF;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+      #game-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+       #game-info {
+    border-radius: 10px;
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 70vh;
+    background-color: rgba(255, 255, 255, 0.8);
+    margin-right: 20px;
+   max-width: 100% !important;
+ }
+
+#leaderboard-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    font-size: 18px; 
+   max-width: 100% !important;
+    overflow-x: auto;
+}
+      canvas {
+    border: 5px solid #333;
+    margin: auto;     
+display: block;
+
+}
+
+        #controls-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-end; 
+            margin-right: 20px;
+        }
+
+        #game-cell {
+            margin-left: 0;
+        }
+
+        .control {
+            width: 120px;
+            height: 120px;
+            border: 5px solid #333;
+            border-radius: 50%;
+            font-size: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            margin: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+    
+
+        #nickname-container {
+            display: inline-block;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #nickname-label {
+            font-size: 20px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        #nickname {
+            width: 180px;
+            font-size: 18px;
+        }
+
+        #visitor-counter {
+            font-size: 22px; 
+            text-align: center; 
+        }
+
+        ::-webkit-scrollbar {
+            width: 20px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+
+    <script type="text/javascript">
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</head>
+<body>
+<div id="game-info">
+    <center>
+        <div id="nickname-container">
+            <label id="nickname-label" for="nickname">Enter your nickname:</label>
+            <input type="text" id="nickname">
+        </div>
+    </center>
+    <h2><center>Leaderboard:</center></h2>
+    <ul id="leaderboard-list"></ul>
+   </div>
+
+<div id="game-container">
+      <div id="game-cell">
+        <canvas></canvas>
+    </div>
+
+ 
+    <div id="game-image"></div>
+
+ 
+    <div id="controls-container">
+        <div id="control-container">
+            <div id="up" class="control">&uarr;</div>
+            <div id="left" class="control">&larr;</div>
+            <div id="down" class="control">&darr;</div>
+            <div id="right" class="control">&rarr;</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var COLS = 36, 
+        ROWS = 36, 
+        EMPTY = 0,
+        SNAKE = 1,
+        FRUIT = 2,
+        LEFT  = 0,
+        UP    = 1,
+        RIGHT = 2,
+        DOWN  = 3,
+        KEY_LEFT  = 37,
+        KEY_UP    = 38,
+        KEY_RIGHT = 39,
+        KEY_DOWN  = 40,
+        canvas,   
+        ctx,      
+        keystate,
+        frames,   
+        score,
+        nickname;    
+
+    grid = {
+        width: null,  
+        height: null,
+        _grid: null,  
+
+        init: function(d, c, r) {
+            this.width = c;
+            this.height = r;
+
+            this._grid = [];
+            for (var x=0; x < c; x++) {
+                this._grid.push([]);
+                for (var y=0; y < r; y++) {
+                    this._grid[x].push(d);
+                }
+            }
+        },
+
+        set: function(val, x, y) {
+            this._grid[x][y] = val;
+        },
+
+        get: function(x, y) {
+            return this._grid[x][y];
+        }
+    };
+
+    snake = {
+        direction: null,
+        last: null,      
+        _queue: null,   
+
+        init: function(d, x, y) {
+            this.direction = d;
+
+            this._queue = [];
+            this.insert(x, y);
+        },
+
+        insert: function(x, y) {
+            this._queue.unshift({x:x, y:y});
+            this.last = this._queue[0];
+        },
+
+        remove: function() {
+            return this._queue.pop();
+        }
+    };
+
+    function setFood() {
+        var empty = [];
+
+        for (var x=0; x < grid.width; x++) {
+            for (var y=0; y < grid.height; y++) {
+                if (grid.get(x, y) === EMPTY) {
+                    empty.push({x:x, y:y});
+                }
+            }
+        }
+
+        var randpos = empty[Math.round(Math.random()*(empty.length - 1))];
+        grid.set(FRUIT, randpos.x, randpos.y);
+    }
+
+    function main() {
+        canvas = document.querySelector("canvas");
+        canvas.width = COLS*20; 
+        canvas.height = ROWS*20; 
+        ctx = canvas.getContext("2d");
+
+        frames = 0;
+        keystate = {};
+
+        document.addEventListener("keydown", function(evt) {
+            keystate[evt.keyCode] = true;
+        });
+        document.addEventListener("keyup", function(evt) {
+            delete keystate[evt.keyCode];
+        });
+
+        document.getElementById('nickname').addEventListener('input', function() {
+            nickname = this.value.trim();
+        });
+
+        init();
+        loop();
+    }
+
+    function init() {
+        score = 0;
+
+        grid.init(EMPTY, COLS, ROWS);
+
+        var sp = {x:Math.floor(COLS/2), y:ROWS-1};
+        snake.init(UP, sp.x, sp.y);
+        grid.set(SNAKE, sp.x, sp.y);
+
+        setFood();
+        if (!nickname) {
+            nickname = 'Anonymous';
+        }
+    }
+
+    function loop() {
+        update();
+        draw();
+
+        window.requestAnimationFrame(loop);
+    }
+
+    function update() {
+        frames++;
+
+        if (keystate[KEY_LEFT] && snake.direction !== RIGHT) {
+            snake.direction = LEFT;
+        }
+        if (keystate[KEY_UP] && snake.direction !== DOWN) {
+            snake.direction = UP;
+        }
+        if (keystate[KEY_RIGHT] && snake.direction !== LEFT) {
+            snake.direction = RIGHT;
+        }
+        if (keystate[KEY_DOWN] && snake.direction !== UP) {
+            snake.direction = DOWN;
+        }
+
+        if (frames%7 === 0) {
+            var nx = snake.last.x;
+            var ny = snake.last.y;
+
+            switch (snake.direction) {
+                case LEFT:
+                    nx--;
+                    break;
+                case UP:
+                    ny--;
+                    break;
+                case RIGHT:
+                    nx++;
+                    break;
+                case DOWN:
+                    ny++;
+                    break;
+            }
+
+            if (0 > nx || nx > grid.width-1  ||
+                0 > ny || ny > grid.height-1 ||
+                grid.get(nx, ny) === SNAKE
+            ) {
+                gameOver();
+                return;
+            }
+
+            if (grid.get(nx, ny) === FRUIT) {
+                score++;
+                setFood();
+            } else {
+                var tail = snake.remove();
+                grid.set(EMPTY, tail.x, tail.y);
+            }
+
+            grid.set(SNAKE, nx, ny);
+            snake.insert(nx, ny);
+        }
+    }
+
+    function draw() {
+        var tw = canvas.width/grid.width;
+        var th = canvas.height/grid.height;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (var x=0; x < grid.width; x++) {
+            for (var y=0; y < grid.height; y++) {
+
+                switch (grid.get(x, y)) {
+                    case EMPTY:
+                        ctx.fillStyle = "#009BFF";
+                        ctx.fillRect(x*tw, y*th, tw, th);
+                        break;
+                    case SNAKE:
+                        ctx.fillStyle = "#333";
+                        ctx.beginPath();
+                        ctx.arc(x*tw + tw/2, y*th + th/2, Math.min(tw, th) / 2.8, 0, 2 * Math.PI);
+                        ctx.fill();
+                        break;
+                    case FRUIT:
+                        ctx.fillStyle = "#333";
+                        ctx.beginPath();
+                        ctx.arc(x*tw + tw/2, y*th + th/2, Math.min(tw, th) / 2.8, 0, 2 * Math.PI);
+                        ctx.fill();
+                        break;
+                }
+            }
+        }
+
+        ctx.font = "16px Arial";
+        ctx.fillStyle = "#FFF";
+        var scoreText = "SCORE: " + score;
+        ctx.fillText(scoreText, 8, 8 + parseInt(ctx.font));
+
+        ctx.font = "16px Arial"; 
+        ctx.fillStyle = "#FFF"; 
+        var text = "by Oliver Nikolajevic";
+        var textWidth = ctx.measureText(text).width;
+        ctx.fillText(text, canvas.width - textWidth - 12, canvas.height - 12);
+    }
+
+    function gameOver() {
+        var leaderboard = localStorage.getItem('leaderboard');
+        if (!leaderboard) {
+            leaderboard = [];
+        } else {
+            leaderboard = JSON.parse(leaderboard);
+        }
+
+        var existingEntryIndex = leaderboard.findIndex(entry => entry.nickname === nickname);
+        if (existingEntryIndex !== -1) {
+            if (score > leaderboard[existingEntryIndex].score) {
+                leaderboard[existingEntryIndex].score = score;
+            }
+        } else {
+            leaderboard.push({ nickname: nickname, score: score });
+        }
+
+        leaderboard.sort((a, b) => b.score - a.score);
+        localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
+        updateLeaderboard();
+        init();
+    }
+
+    function updateLeaderboard() {
+        var leaderboardList = document.getElementById('leaderboard-list');
+        leaderboardList.innerHTML = '';
+        var leaderboard = localStorage.getItem('leaderboard');
+        if (leaderboard) {
+            leaderboard = JSON.parse(leaderboard);
+            leaderboard.forEach(entry => {
+                var li = document.createElement('li');
+                li.textContent = entry.nickname + ': ' + entry.score + ' points';
+                leaderboardList.appendChild(li);
+            });
+        }
+    }
+
+document.getElementById('up').addEventListener('touchstart', function() {
+    keystate[KEY_UP] = true;
+});
+document.getElementById('up').addEventListener('touchend', function() {
+    delete keystate[KEY_UP];
+});
+
+document.getElementById('down').addEventListener('touchstart', function() {
+    keystate[KEY_DOWN] = true;
+});
+document.getElementById('down').addEventListener('touchend', function() {
+    delete keystate[KEY_DOWN];
+});
+
+document.getElementById('left').addEventListener('touchstart', function() {
+    keystate[KEY_LEFT] = true;
+});
+document.getElementById('left').addEventListener('touchend', function() {
+    delete keystate[KEY_LEFT];
+});
+
+document.getElementById('right').addEventListener('touchstart', function() {
+    keystate[KEY_RIGHT] = true;
+});
+document.getElementById('right').addEventListener('touchend', function() {
+    delete keystate[KEY_RIGHT];
+});
+
+    main();
+</script>
+</body>
+</html>
